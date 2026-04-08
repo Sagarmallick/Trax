@@ -1,21 +1,278 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <title>Trax</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Trax | Real-time Group Tracking</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --success: #10b981;
+            --danger: #ef4444;
+            --bg: #f8fafc;
+            --surface: rgba(255, 255, 255, 0.9);
+            --text: #1e293b;
+            --text-light: #64748b;
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --glass: blur(12px) saturate(180%);
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Hero / Overlays */
+        .overlay {
+            position: absolute;
+            z-index: 1000;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .header-panel {
+            top: 16px;
+            left: 16px;
+            right: 16px;
+            background: var(--surface);
+            backdrop-filter: var(--glass);
+            -webkit-backdrop-filter: var(--glass);
+            padding: 12px 16px;
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header-title h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: #e2e8f0;
+            color: var(--text-light);
+        }
+
+        .status-on-route {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-off-route {
+            background: #fee2e2;
+            color: #991b1b;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        /* Controls Panel */
+        .controls-panel {
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 32px);
+            max-width: 400px;
+            background: var(--surface);
+            backdrop-filter: var(--glass);
+            -webkit-backdrop-filter: var(--glass);
+            padding: 20px;
+            border-radius: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus {
+            border-color: var(--primary);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button:hover {
+            background: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background: #f1f5f9;
+            color: var(--text);
+            margin-top: 8px;
+        }
+
+        /* Floating buttons */
+        .floating-action {
+            right: 16px;
+            bottom: 200px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .fab {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--surface);
+            backdrop-filter: var(--glass);
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        /* Hidden when joined */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Custom Leaflet Controls */
+        .leaflet-control-zoom {
+            border: none !important;
+            box-shadow: var(--shadow) !important;
+            border-radius: 12px !important;
+            overflow: hidden;
+        }
+
+        .leaflet-control-zoom-in,
+        .leaflet-control-zoom-out {
+            background: var(--surface) !important;
+            backdrop-filter: var(--glass) !important;
+            border: none !important;
+            color: var(--text) !important;
+            width: 36px !important;
+            height: 36px !important;
+            line-height: 36px !important;
+        }
+
+        /* Tooltip & Popups */
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            padding: 4px;
+        }
+
+        .leaflet-popup-tip {
+            background: white;
+        }
+    </style>
 </head>
 
 <body>
 
-    <h2>Group Tracking</h2>
+    <!-- Header Overlay -->
+    <div class="overlay header-panel">
+        <div class="header-title">
+            <h1>Trax</h1>
+        </div>
+        <div id="status-display" class="status-badge">
+            Not tracking
+        </div>
+    </div>
 
-    <input id="username" placeholder="Enter username">
-    <input id="room" placeholder="Enter room">
-    <button onclick="joinRoom()">Join</button>
+    <!-- Floating Actions -->
+    <div class="overlay floating-action">
+        <div class="fab" onclick="locateMe()" title="Locate Me">📍</div>
+        <div id="route-toggle" class="fab hidden" onclick="centerRoute()" title="Center Route">🏁</div>
+    </div>
 
-    <p id="status"></p>
-    <div id="map" style="height: 400px;"></div>
+    <!-- Join Panel -->
+    <div id="join-panel" class="overlay controls-panel">
+        <div class="input-group">
+            <input id="username" type="text" placeholder="Your Name" autocomplete="off">
+            <input id="room" type="text" placeholder="Room Code" autocomplete="off">
+            <button onclick="joinRoom()">
+                Join Room
+            </button>
+        </div>
+    </div>
+
+    <!-- Map -->
+    <div id="map"></div>
+
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script>
@@ -24,24 +281,36 @@
         let username = "";
         let room = "";
         let trackingInterval = null;
-        let map = L.map('map').setView([28.6139, 77.2090], 13); // default Delhi
+        let map = L.map('map', { zoomControl: false }).setView([28.6139, 77.2090], 13);
+        L.control.zoom({ position: 'topright' }).addTo(map);
+
         let routeLine = null;
         let destinationMarker = null;
         let currentRouteCoords = [];
-
         let myMarker = null;
         let otherUsers = {};
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
+        // Custom Icons
+        const getCustomIcon = (color, isMe = false) => L.divIcon({
+            className: 'custom-div-icon',
+            html: `<div style="background-color: ${color}; width: ${isMe ? '16px' : '12px'}; height: ${isMe ? '16px' : '12px'}; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
+            iconSize: isMe ? [16, 16] : [12, 12],
+            iconAnchor: isMe ? [8, 8] : [6, 6]
+        });
+
+        const destIcon = L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/2776/2776067.png',
+            iconSize: [32, 32],
+            iconAnchor: [16, 32]
+        });
+
+        L.tileLayer('https://{s}.tile.carto.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap contributors © CARTO'
         }).addTo(map);
 
         // Click on map to set destination
         map.on('click', function (e) {
-            if (!username) {
-                alert("Join a room first!");
-                return;
-            }
+            if (!username) return;
             setDestination(e.latlng.lat, e.latlng.lng);
         });
 
@@ -73,158 +342,126 @@
         socket.on("route_received", (data) => {
             const { destination, coordinates } = data;
             currentRouteCoords = coordinates;
+            document.getElementById('route-toggle').classList.remove('hidden');
 
-            // Update Destination Marker
             if (destinationMarker) {
                 destinationMarker.setLatLng([destination.lat, destination.lng]);
             } else {
-                destinationMarker = L.marker([destination.lat, destination.lng], {
-                    icon: L.icon({
-                        iconUrl: 'https://cdn-icons-png.flaticon.com/512/2776/2776067.png', // Finish flag icon
-                        iconSize: [32, 32],
-                        iconAnchor: [16, 32]
-                    })
-                }).addTo(map).bindPopup("<b>Destination</b>").openPopup();
+                destinationMarker = L.marker([destination.lat, destination.lng], { icon: destIcon })
+                    .addTo(map).bindPopup("<b>Destination</b>");
             }
 
-            // Update Polyline
             if (routeLine) {
                 routeLine.setLatLngs(coordinates);
             } else {
                 routeLine = L.polyline(coordinates, {
-                    color: '#2563eb',
+                    color: '#3b82f6',
                     weight: 6,
-                    opacity: 0.8
+                    opacity: 0.7,
+                    lineJoin: 'round'
                 }).addTo(map);
             }
-
-            map.fitBounds(routeLine.getBounds());
+            map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
         });
 
-        // Join Room
         function joinRoom() {
             username = document.getElementById("username").value;
             room = document.getElementById("room").value;
 
             if (!username || !room) {
-                alert("Enter username and room");
+                alert("Please enter both name and room code");
                 return;
             }
 
             socket.emit("join_room", { username, room });
-
-            document.getElementById("status").innerText =
-                "Joined room: " + room;
-
+            document.getElementById("join-panel").classList.add("hidden");
+            document.getElementById("status-display").innerText = `Room: ${room}`;
             startTracking();
         }
 
-        // Start sending location
         function startTracking() {
             if (trackingInterval) return;
 
             trackingInterval = setInterval(() => {
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
+                        const { latitude: lat, longitude: lng } = position.coords;
 
-                        // Update your marker
                         if (myMarker) {
                             myMarker.setLatLng([lat, lng]);
                         } else {
-                            const myIcon = L.divIcon({
-                                className: 'custom-div-icon',
-                                html: `<div style="background-color: #3b82f6; width: 14px; height: 14px; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 8px rgba(0,0,0,0.6);"></div>`,
-                                iconSize: [14, 14],
-                                iconAnchor: [7, 7]
-                            });
-
-                            myMarker = L.marker([lat, lng], { icon: myIcon })
+                            myMarker = L.marker([lat, lng], { icon: getCustomIcon('#3b82f6', true) })
                                 .addTo(map)
-                                .bindPopup("<b>You</b>")
-                                .openPopup();
+                                .bindPopup("<b>You</b>");
 
-                            if (!routeLine) {
-                                map.setView([lat, lng], 13);
-                            }
+                            if (!routeLine) map.setView([lat, lng], 15);
                         }
 
                         socket.emit("send_location", { lat, lng });
-
-                        // Check off-route
                         checkOffRoute(lat, lng);
                     },
-                    (error) => {
-                        console.error("Location error:", error);
-                    }
+                    (error) => console.error("Location error:", error),
+                    { enableHighAccuracy: true }
                 );
             }, 3000);
         }
 
         function checkOffRoute(lat, lng) {
-            if (!currentRouteCoords || currentRouteCoords.length === 0) return;
+            if (!currentRouteCoords.length) return;
 
-            // Simple distance check: find minimum distance to any point on the route
             let minDistance = Infinity;
-
             for (const pt of currentRouteCoords) {
                 const d = getDistance(lat, lng, pt[0], pt[1]);
                 if (d < minDistance) minDistance = d;
             }
 
-            console.log("Distance from route:", minDistance, "meters");
-
-            if (minDistance > 50) { // 50 meters tolerance
-                document.getElementById("status").innerHTML = `Joined room: ${room} <br> <b style="color: red;">⚠️ OFF ROUTE (${Math.round(minDistance)}m)</b>`;
+            const statusEl = document.getElementById("status-display");
+            if (minDistance > 50) {
+                statusEl.innerText = `OFF ROUTE (${Math.round(minDistance)}m)`;
+                statusEl.className = "status-badge status-off-route";
             } else {
-                document.getElementById("status").innerHTML = `Joined room: ${room} <br> <b style="color: green;">✓ On Route</b>`;
+                statusEl.innerText = "On Route";
+                statusEl.className = "status-badge status-on-route";
             }
         }
 
         function getDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3; // metres
+            const R = 6371e3;
             const φ1 = lat1 * Math.PI / 180;
             const φ2 = lat2 * Math.PI / 180;
             const Δφ = (lat2 - lat1) * Math.PI / 180;
             const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-            return R * c; // in metres
+            const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         }
 
-        // Receive other users' location
-        socket.on("receive_location", (data) => {
-            let { id, username, lat, lng } = data;
+        function locateMe() {
+            if (myMarker) {
+                map.setView(myMarker.getLatLng(), 16, { animate: true });
+            } else {
+                // Try to get location just once to center
+                navigator.geolocation.getCurrentPosition(p => {
+                    map.setView([p.coords.latitude, p.coords.longitude], 16);
+                });
+            }
+        }
 
+        function centerRoute() {
+            if (routeLine) map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
+        }
+
+        socket.on("receive_location", (data) => {
+            let { id, username: otherName, lat, lng } = data;
             if (id === socket.id) return;
 
             if (otherUsers[id]) {
                 otherUsers[id].setLatLng([lat, lng]);
             } else {
-                const colors = ['#e11d48', '#16a34a', '#2563eb', '#9333ea', '#ea580c', '#0891b2'];
-                const colorIndex = Object.keys(otherUsers).length % colors.length;
-                const userColor = colors[colorIndex];
-
-                const icon = L.divIcon({
-                    className: 'custom-div-icon',
-                    html: `<div style="background-color: ${userColor}; width: 12px; height: 12px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>`,
-                    iconSize: [12, 12],
-                    iconAnchor: [6, 6]
-                });
-
-                const marker = L.marker([lat, lng], {
-                    title: username,
-                    icon: icon
-                })
+                const colors = ['#e11d48', '#10b981', '#6366f1', '#f59e0b', '#8b5cf6'];
+                const color = colors[Object.keys(otherUsers).length % colors.length];
+                otherUsers[id] = L.marker([lat, lng], { icon: getCustomIcon(color) })
                     .addTo(map)
-                    .bindPopup(`<b>${username}</b>`);
-
-                otherUsers[id] = marker;
+                    .bindPopup(`<b>${otherName}</b>`);
             }
         });
 
@@ -234,7 +471,6 @@
                 delete otherUsers[id];
             }
         });
-
     </script>
 
 </body>
