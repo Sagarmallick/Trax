@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Trax</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+</head>
+
+<body>
+
+    <h2>Group Tracking</h2>
+
+    <input id="username" placeholder="Enter username">
+    <input id="room" placeholder="Enter room">
+    <button onclick="joinRoom()">Join</button>
+
+    <p id="status"></p>
+    <div id="map" style="height: 400px;"></div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        let username = "";
+        let room = "";
+        let trackingInterval = null;
+        let map = L.map('map').setView([28.6139, 77.2090], 13); // default Delhi
+        let routeLine = null;
+        let destinationMarker = null;
+        let currentRouteCoords = [];
+
+        let myMarker = null;
+        let otherUsers = {};
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        // Click on map to set destination
+        map.on('click', function (e) {
+            if (!username) {
+                alert("Join a room first!");
+                return;
+            }
+            setDestination(e.latlng.lat, e.latlng.lng);
+        });
+
+        async function setDestination(lat, lng) {
+            if (!myMarker) {
+                alert("Waiting for your location...");
+                return;
+            }
+
+            const myPos = myMarker.getLatLng();
+            const url = `https://router.project-osrm.org/route/v1/driving/${myPos.lng},${myPos.lat};${lng},${lat}?overview=full&geometries=geojson`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.routes && data.routes.length > 0) {
+                    const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                    socket.emit("set_route", {
+                        destination: { lat, lng },
+                        coordinates: coords
+                    });
+                }
+            } catch (error) {
+                console.error("Error fetching route:", error);
+            }
+        }
+
+        socket.on("route_received", (data) => {
+            const { destination, coordinates } = data;
+            currentRouteCoords = coordinates;
+
+            // Update Destination Marker
+            if (destinationMarker) {
+                destinationMarker.setLatLng([destination.lat, destination.lng]);
+            } else {
+                destinationMarker = L.marker([destination.lat, destination.lng], {
+                    icon: L.icon({
+                        iconUrl: 'https://cdn-icons-png.flaticon.com/512/2776/2776067.png', // Finish flag icon
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 32]
+                    })
+                }).addTo(map).bindPopup("<b>Destination</b>").openPopup();
+            }
+
+            // Update Polyline
+            if (routeLine) {
+                routeLine.setLatLngs(coordinates);
+            } else {
+                routeLine = L.polyline(coordinates, {
+                    color: '#2563eb',
+                    weight: 6,
+                    opacity: 0.8
+                }).addTo(map);
+            }
+
+            map.fitBounds(routeLine.getBounds());
+        });
+
+        // Join Room
+        function joinRoom() {
+            username = document.getElementById("username").value;
+            room = document.getElementById("room").value;
+
+            if (!username || !room) {
+                alert("Enter username and room");
+                return;
+            }
+
+            socket.emit("join_room", { username, room });
+
+            document.getElementById("status").innerText =
+                "Joined room: " + room;
+
+            startTracking();
+        }
+
+        // Start sending location
+        function startTracking() {
+            if (trackingInterval) return;
+
+            trackingInterval = setInterval(() => {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+
+                        // Update your marker
+                        if (myMarker) {
+                            myMarker.setLatLng([lat, lng]);
+                        } else {
+                            const myIcon = L.divIcon({
+                                className: 'custom-div-icon',
+                                html: `<div style="background-color: #3b82f6; width: 14px; height: 14px; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 8px rgba(0,0,0,0.6);"></div>`,
+                                iconSize: [14, 14],
+                                iconAnchor: [7, 7]
+                            });
+
+                            myMarker = L.marker([lat, lng], { icon: myIcon })
+                                .addTo(map)
+                                .bindPopup("<b>You</b>")
+                                .openPopup();
+
+                            if (!routeLine) {
+                                map.setView([lat, lng], 13);
+                            }
+                        }
+
+                        socket.emit("send_location", { lat, lng });
+
+                        // Check off-route
+                        checkOffRoute(lat, lng);
+                    },
+                    (error) => {
+                        console.error("Location error:", error);
+                    }
+                );
+            }, 3000);
+        }
+
+        function checkOffRoute(lat, lng) {
+            if (!currentRouteCoords || currentRouteCoords.length === 0) return;
+
+            // Simple distance check: find minimum distance to any point on the route
+            let minDistance = Infinity;
+
+            for (const pt of currentRouteCoords) {
+                const d = getDistance(lat, lng, pt[0], pt[1]);
+                if (d < minDistance) minDistance = d;
+            }
+
+            console.log("Distance from route:", minDistance, "meters");
+
+            if (minDistance > 50) { // 50 meters tolerance
+                document.getElementById("status").innerHTML = `Joined room: ${room} <br> <b style="color: red;">⚠️ OFF ROUTE (${Math.round(minDistance)}m)</b>`;
+            } else {
+                document.getElementById("status").innerHTML = `Joined room: ${room} <br> <b style="color: green;">✓ On Route</b>`;
+            }
+        }
+
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // metres
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δφ = (lat2 - lat1) * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            return R * c; // in metres
+        }
+
+        // Receive other users' location
+        socket.on("receive_location", (data) => {
+            let { id, username, lat, lng } = data;
+
+            if (id === socket.id) return;
+
+            if (otherUsers[id]) {
+                otherUsers[id].setLatLng([lat, lng]);
+            } else {
+                const colors = ['#e11d48', '#16a34a', '#2563eb', '#9333ea', '#ea580c', '#0891b2'];
+                const colorIndex = Object.keys(otherUsers).length % colors.length;
+                const userColor = colors[colorIndex];
+
+                const icon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background-color: ${userColor}; width: 12px; height: 12px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 5px rgba(0,0,0,0.5);"></div>`,
+                    iconSize: [12, 12],
+                    iconAnchor: [6, 6]
+                });
+
+                const marker = L.marker([lat, lng], {
+                    title: username,
+                    icon: icon
+                })
+                    .addTo(map)
+                    .bindPopup(`<b>${username}</b>`);
+
+                otherUsers[id] = marker;
+            }
+        });
+
+        socket.on("user_left", (id) => {
+            if (otherUsers[id]) {
+                map.removeLayer(otherUsers[id]);
+                delete otherUsers[id];
+            }
+        });
+
+    </script>
+
+</body>
+
+</html>
