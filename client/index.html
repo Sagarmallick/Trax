@@ -262,12 +262,19 @@
     <!-- Join Panel -->
     <div id="join-panel" class="overlay controls-panel">
         <div class="input-group">
+            <h2 style="margin: 0 0 8px 0; font-size: 1.1rem;">Join Group</h2>
             <input id="username" type="text" placeholder="Your Name" autocomplete="off">
             <input id="room" type="text" placeholder="Room Code" autocomplete="off">
             <button onclick="joinRoom()">
                 Join Room
             </button>
+            <button class="btn-secondary" onclick="joinRoom(true)">
+                Demo Mode (Simulation)
+            </button>
         </div>
+        <p style="font-size: 0.75rem; color: var(--text-light); margin-top: 12px; text-align: center;">
+            Use Demo Mode if real GPS is unavailable.
+        </p>
     </div>
 
     <!-- Map -->
@@ -304,9 +311,12 @@
             iconAnchor: [16, 32]
         });
 
-        L.tileLayer('https://{s}.tile.carto.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '© OpenStreetMap contributors © CARTO'
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
         }).addTo(map);
+
+        // Ensure map renders correctly on load
+        setTimeout(() => map.invalidateSize(), 500);
 
         // Click on map to set destination
         map.on('click', function (e) {
@@ -364,9 +374,9 @@
             map.fitBounds(routeLine.getBounds(), { padding: [50, 50] });
         });
 
-        function joinRoom() {
-            username = document.getElementById("username").value;
-            room = document.getElementById("room").value;
+        function joinRoom(isDemo = false) {
+            username = document.getElementById("username").value || (isDemo ? "Demo User" : "");
+            room = document.getElementById("room").value || (isDemo ? "DEMO1" : "");
 
             if (!username || !room) {
                 alert("Please enter both name and room code");
@@ -375,8 +385,39 @@
 
             socket.emit("join_room", { username, room });
             document.getElementById("join-panel").classList.add("hidden");
-            document.getElementById("status-display").innerText = `Room: ${room}`;
-            startTracking();
+            document.getElementById("status-display").innerText = `Room: ${room}${isDemo ? ' (Demo)' : ''}`;
+
+            if (isDemo) {
+                simulateLocation();
+            } else {
+                startTracking();
+            }
+        }
+
+        function simulateLocation() {
+            // Simulate Delhi location for demo purposes
+            let lat = 28.6139 + (Math.random() - 0.5) * 0.01;
+            let lng = 77.2090 + (Math.random() - 0.5) * 0.01;
+
+            const update = () => {
+                lat += (Math.random() - 0.5) * 0.001;
+                lng += (Math.random() - 0.5) * 0.001;
+
+                if (myMarker) {
+                    myMarker.setLatLng([lat, lng]);
+                } else {
+                    myMarker = L.marker([lat, lng], { icon: getCustomIcon('#3b82f6', true) })
+                        .addTo(map)
+                        .bindPopup("<b>You (Demo)</b>");
+                    map.setView([lat, lng], 15);
+                }
+
+                socket.emit("send_location", { lat, lng });
+                checkOffRoute(lat, lng);
+            };
+
+            update();
+            trackingInterval = setInterval(update, 3000);
         }
 
         function startTracking() {
