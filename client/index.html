@@ -421,30 +421,46 @@
         }
 
         function startTracking() {
-            if (trackingInterval) return;
+            if (trackingInterval) return; // In demo mode or already tracking
 
-            trackingInterval = setInterval(() => {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const { latitude: lat, longitude: lng } = position.coords;
+            const statusEl = document.getElementById("status-display");
+            statusEl.innerText = "Locating...";
 
-                        if (myMarker) {
-                            myMarker.setLatLng([lat, lng]);
-                        } else {
-                            myMarker = L.marker([lat, lng], { icon: getCustomIcon('#3b82f6', true) })
-                                .addTo(map)
-                                .bindPopup("<b>You</b>");
+            trackingInterval = navigator.geolocation.watchPosition(
+                (position) => {
+                    const { latitude: lat, longitude: lng } = position.coords;
 
-                            if (!routeLine) map.setView([lat, lng], 15);
+                    if (myMarker) {
+                        myMarker.setLatLng([lat, lng]);
+                    } else {
+                        myMarker = L.marker([lat, lng], { icon: getCustomIcon('#3b82f6', true) })
+                            .addTo(map)
+                            .bindPopup("<b>You</b>");
+
+                        if (!routeLine) map.setView([lat, lng], 15);
+                        if (statusEl.innerText === "Locating...") {
+                            statusEl.innerText = `Room: ${room}`;
                         }
+                    }
 
-                        socket.emit("send_location", { lat, lng });
-                        checkOffRoute(lat, lng);
-                    },
-                    (error) => console.error("Location error:", error),
-                    { enableHighAccuracy: true }
-                );
-            }, 3000);
+                    socket.emit("send_location", { lat, lng });
+                    checkOffRoute(lat, lng);
+                },
+                (error) => {
+                    console.error("Location error:", error);
+                    let msg = "Location error";
+                    if (error.code === 1) msg = "GPS Denied";
+                    else if (error.code === 2) msg = "GPS Unavailable";
+                    else if (error.code === 3) msg = "GPS Timeout";
+                    statusEl.innerText = msg;
+                    statusEl.className = "status-badge status-off-route";
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
         }
 
         function checkOffRoute(lat, lng) {
