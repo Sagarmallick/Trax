@@ -35,7 +35,10 @@ The app uses **Socket.io rooms** to isolate group tracking.
 - When a user joins, they are added to a specific room based on the "Room Code".
 - **Leader System**: The first person to join a room is assigned as the **Leader**. The server broadcasts `leader_update` to all participants, ensuring everyone knows who the current leader is.
 - **Dynamic Promotion**: If the leader leaves, the server automatically promotes the next available member to Leader status and notifies the room.
-- The server maintains state for active `users`, their `userLocations`, and any active `roomRoutes`.
+- The app uses a **hybrid persistence model**:
+    - **In-memory**: Active user lists and live location updates are strictly in-memory for zero-latency broadcasting.
+    - **MongoDB**: Rooms and shared Routes are persisted to a database (`trax` db) to survive server restarts.
+- **Auto-Recovery**: On server startup, the system automatically reloads any stored routes into memory, ensuring active sessions remain functional.
 
 ### 2. Location Tracking & Navigation
 - **Real-time**: High-accuracy tracking using `navigator.geolocation.watchPosition`, now including **heading/bearing** data and **speed** calculation.

@@ -1,11 +1,22 @@
+require('dotenv').config();
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
+const mongoose = require("mongoose");
+const { Room, Route } = require("./models");
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/trax")
+    .then(() => {
+        console.log("Connected to MongoDB");
+        loadActiveRoutes();
+    })
+    .catch(err => console.error("MongoDB connection error:", err));
 
 // Serve client folder
 app.use(express.static(path.join(__dirname, "../client")));
@@ -15,11 +26,27 @@ let userLocations = {}; // Track last known location of each user
 let roomRoutes = {}; // Track the current route for each room
 let roomLeaders = {}; // Track the leader (socket.id) of each room
 
+// Load routes on startup
+async function loadActiveRoutes() {
+    try {
+        const routes = await Route.find();
+        routes.forEach(r => {
+            roomRoutes[r.roomId] = {
+                destination: r.destination,
+                coordinates: r.coordinates
+            };
+            console.log(`Recovered route for room: ${r.roomId}`);
+        });
+    } catch (err) {
+        console.error("Recovery error:", err);
+    }
+}
+
 io.on("connection", (socket) => {
     console.log("User connected:", socket.id);
 
     // Join Room
-    socket.on("join_room", (data) => {
+    socket.on("join_room", async (data) => {
         const { username, room } = data;
 
         socket.join(room);
@@ -29,38 +56,58 @@ io.on("connection", (socket) => {
             room
         };
 
-        // Assign leader if room is new
-        if (!roomLeaders[room]) {
-            roomLeaders[room] = socket.id;
-            console.log(`Leader assigned for room ${room}: ${username}`);
-        }
+        // Persistent Room Logic
+        try {
+            let roomDoc = await Room.findOne({ roomId: room });
+            if (!roomDoc) {
+                roomDoc = await Room.create({ roomId: room, leaderId: socket.id });
+                console.log(`Room ${room} created in DB`);
+            }
 
-        // Broadcast current leader to everyone in room
-        const leaderId = roomLeaders[room];
-        const leaderName = users[leaderId] ? users[leaderId].username : "Unknown";
-        io.in(room).emit("leader_update", { leaderId, leaderName });
+            // Assign leader in memory
+            if (!roomLeaders[room]) {
+                roomLeaders[room] = socket.id;
+                console.log(`Leader assigned for room ${room}: ${username}`);
+            }
 
-        console.log(`${username} joined room ${room}`);
+            // Broadcast current leader
+            const leaderId = roomLeaders[room];
+            const leaderName = users[leaderId] ? users[leaderId].username : "Unknown";
+            io.in(room).emit("leader_update", { leaderId, leaderName });
 
-        // Send existing users' locations to newly joined user
-        Object.entries(users)
-            .filter(([userId, user]) => user.room === room && userId !== socket.id)
-            .forEach(([userId, user]) => {
-                if (userLocations[userId]) {
-                    const locationData = {
-                        id: userId,
-                        username: user.username,
-                        lat: userLocations[userId].lat,
-                        lng: userLocations[userId].lng,
-                        heading: userLocations[userId].heading
+            console.log(`${username} joined room ${room}`);
+
+            // Send existing users' locations (In-memory only)
+            Object.entries(users)
+                .filter(([userId, user]) => user.room === room && userId !== socket.id)
+                .forEach(([userId, user]) => {
+                    if (userLocations[userId]) {
+                        socket.emit("receive_location", {
+                            id: userId,
+                            username: user.username,
+                            lat: userLocations[userId].lat,
+                            lng: userLocations[userId].lng,
+                            heading: userLocations[userId].heading
+                        });
+                    }
+                });
+
+            // Send existing route (Check memory first, then DB)
+            if (roomRoutes[room]) {
+                socket.emit("route_received", roomRoutes[room]);
+            } else {
+                const routeDoc = await Route.findOne({ roomId: room });
+                if (routeDoc) {
+                    const routeData = {
+                        destination: routeDoc.destination,
+                        coordinates: routeDoc.coordinates
                     };
-                    socket.emit("receive_location", locationData);
+                    roomRoutes[room] = routeData;
+                    socket.emit("route_received", routeData);
                 }
-            });
-
-        // Send existing route to joining user
-        if (roomRoutes[room]) {
-            socket.emit("route_received", roomRoutes[room]);
+            }
+        } catch (err) {
+            console.error("join_room DB error:", err);
         }
     });
 
@@ -87,7 +134,7 @@ io.on("connection", (socket) => {
     });
 
     // Set Route
-    socket.on("set_route", (data) => {
+    socket.on("set_route", async (data) => {
         const user = users[socket.id];
         if (!user) return;
 
@@ -97,11 +144,27 @@ io.on("connection", (socket) => {
             return;
         }
 
-        roomRoutes[user.room] = data; // data contains destination and coordinates
+        roomRoutes[user.room] = data;
         console.log(`Route set for room ${user.room} by ${user.username}`);
 
-        // Broadcast to everyone in room including sender (or just others?)
-        // Usually sender already has it, but broadcasting to everyone ensures consistency
+        // Persist to MongoDB
+        try {
+            await Route.findOneAndUpdate(
+                { roomId: user.room },
+                {
+                    roomId: user.room,
+                    destination: data.destination,
+                    coordinates: data.coordinates,
+                    createdBy: user.username,
+                    createdAt: new Date()
+                },
+                { upsert: true }
+            );
+            console.log(`Route persisted for room ${user.room}`);
+        } catch (err) {
+            console.error("set_route DB error:", err);
+        }
+
         io.in(user.room).emit("route_received", data);
     });
 
