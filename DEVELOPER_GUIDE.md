@@ -39,9 +39,10 @@ The app uses **Socket.io rooms** to isolate group tracking.
 
 ### 2. Location Tracking & Navigation
 - **Real-time**: High-accuracy tracking using `navigator.geolocation.watchPosition`, now including **heading/bearing** data.
-- **Perspective Mode**: A compass feature that auto-centers the map and rotates the user's marker to their current heading.
-- **Distance Tracking**: Real-time distance calculation from each user to the active destination, displayed in status badges and marker popups.
-- **Demo Mode**: Simulates movement with dynamic heading calculation.
+- **Compass Integration**: Uses the `deviceorientation` API to capture the phone's physical heading, rotating the user's marker accurately even when stationary.
+- **Perspective Mode**: A compass feature that auto-centers and **rotates the entire map** (using CSS transforms) so the user's heading always points towards the top of the screen.
+- **Distance Tracking**: Real-time distance calculation from each user to the active destination.
+- **Demo Mode**: Simulates movement with dynamic heading and map rotation support.
 
 ### 3. Shared Routing & Search
 - **Manual Selection**: Leaders can click on the map to set a destination.

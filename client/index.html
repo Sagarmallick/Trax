@@ -44,6 +44,8 @@
             width: 100%;
             height: 100%;
             z-index: 1;
+            transition: transform 0.3s cubic-bezier(0.1, 0, 0.3, 1);
+            transform-origin: center;
         }
 
         /* Hero / Overlays */
@@ -400,6 +402,7 @@
         let isDemoMode = false;
         let isPerspectiveMode = false;
         let myHeading = 0;
+        let myCompassHeading = 0;
         let trackingInterval = null;
         let map = L.map('map', { zoomControl: false }).setView([28.6139, 77.2090], 13);
         L.control.zoom({ position: 'topright' }).addTo(map);
@@ -466,11 +469,65 @@
         }
 
         function togglePerspective() {
+            // Request permission for iOS compass
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            startCompass();
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                startCompass();
+            }
+
             isPerspectiveMode = !isPerspectiveMode;
             document.getElementById("perspective-btn").classList.toggle("fab-active", isPerspectiveMode);
+
+            if (!isPerspectiveMode) {
+                rotateMap(0); // Reset rotation
+            }
+
             if (isPerspectiveMode && myMarker) {
                 const latlng = myMarker.getLatLng();
                 map.setView(latlng, 18, { animate: true });
+                if (myCompassHeading) rotateMap(myCompassHeading);
+            }
+        }
+
+        function startCompass() {
+            if (window.DeviceOrientationEvent) {
+                window.addEventListener('deviceorientation', handleOrientation, true);
+            }
+        }
+
+        function handleOrientation(event) {
+            let heading = 0;
+            if (event.webkitCompassHeading) {
+                heading = event.webkitCompassHeading;
+            } else if (event.absolute) {
+                heading = 360 - event.alpha;
+            } else {
+                return;
+            }
+
+            myCompassHeading = heading;
+            if (myMarker) {
+                myMarker.setIcon(getCustomIcon('#3b82f6', true, myCompassHeading));
+                if (isPerspectiveMode) {
+                    rotateMap(myCompassHeading);
+                }
+            }
+        }
+
+        function rotateMap(heading) {
+            const mapEl = document.getElementById('map');
+            if (isPerspectiveMode && heading !== 0) {
+                // Scale up to 1.5x to hide corners when rotated
+                mapEl.style.transform = `rotate(${-heading}deg) scale(1.6)`;
+            } else {
+                mapEl.style.transform = `rotate(0deg) scale(1)`;
             }
         }
 
@@ -647,6 +704,7 @@
 
                 if (isPerspectiveMode) {
                     map.setView([lat, lng], 18, { animate: true });
+                    rotateMap(heading);
                 }
 
                 socket.emit("send_location", { lat, lng, heading });
@@ -684,6 +742,7 @@
 
                     if (isPerspectiveMode) {
                         map.setView([lat, lng], 18, { animate: true });
+                        rotateMap(myHeading);
                     }
 
                     socket.emit("send_location", { lat, lng, heading: myHeading });
