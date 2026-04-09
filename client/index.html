@@ -238,6 +238,97 @@
         .leaflet-popup-tip {
             background: white;
         }
+
+        /* Search Bar Styles */
+        .search-container {
+            position: relative;
+            /* margin-bottom: 12px; */
+        }
+
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 2000;
+            border: 1px solid #e2e8f0;
+            margin-top: 4px;
+        }
+
+        .search-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .search-item:last-child {
+            border-bottom: none;
+        }
+
+        .search-item:hover {
+            background: #f8fafc;
+        }
+
+        .status-leader {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+        }
+
+        /* Directional Indicator */
+        .directional-icon {
+            transition: transform 0.5s ease;
+        }
+
+        .bearing-arrow {
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 12px solid var(--primary);
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        /* Header Panel Expansion */
+        .header-panel {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 12px;
+            padding: 16px;
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        @media screen and (max-width: 768px) {
+            .header-top {
+                justify-content: center;
+                gap: 10px
+            }
+        }
+
+        .header-search {
+            margin-top: 4px;
+        }
+
+        .fab-active {
+            background: var(--primary) !important;
+            color: white !important;
+            box-shadow: 0 0 15px var(--primary);
+        }
     </style>
 </head>
 
@@ -245,23 +336,37 @@
 
     <!-- Header Overlay -->
     <div class="overlay header-panel">
-        <div class="header-title">
-            <h1>Trax</h1>
+        <div class="header-top">
+            <div class="header-title">
+                <h1>Trax</h1>
+            </div>
+            <!-- Search Panel (Top) -->
+            <div id="search-panel" class="header-search hidden">
+                <div class="search-container">
+                    <input id="destination-search" type="text" placeholder="Search for a place..." autocomplete="off"
+                        oninput="debounceSearch(this.value)">
+                    <div id="search-results" class="search-results hidden"></div>
+                </div>
+            </div>
+            <div id="status-display" class="status-badge">
+                Not tracking
+            </div>
         </div>
-        <div id="status-display" class="status-badge">
-            Not tracking
-        </div>
+
+
     </div>
 
     <!-- Floating Actions -->
     <div class="overlay floating-action">
+        <div id="perspective-btn" class="fab" onclick="togglePerspective()" title="Perspective Mode">🧭</div>
         <div class="fab" onclick="locateMe()" title="Locate Me">📍</div>
         <div id="route-toggle" class="fab hidden" onclick="centerRoute()" title="Center Route">🏁</div>
     </div>
 
-    <!-- Join Panel -->
-    <div id="join-panel" class="overlay controls-panel">
-        <div class="input-group">
+    <!-- Controls Panel -->
+    <div id="controls-panel" class="overlay controls-panel">
+        <!-- Join Group Form -->
+        <div id="join-form" class="input-group">
             <h2 style="margin: 0 0 8px 0; font-size: 1.1rem;">Join Group</h2>
             <input id="username" type="text" placeholder="Your Name" autocomplete="off">
             <input id="room" type="text" placeholder="Room Code" autocomplete="off">
@@ -272,8 +377,9 @@
                 Demo Mode (Simulation)
             </button>
         </div>
-        <p style="font-size: 0.75rem; color: var(--text-light); margin-top: 12px; text-align: center;">
-            Use Demo Mode if real GPS is unavailable.
+
+        <p id="room-info" style="font-size: 0.75rem; color: var(--text-light); margin-top: 12px; text-align: center;">
+            Join a room to start tracking.
         </p>
     </div>
 
@@ -287,6 +393,13 @@
 
         let username = "";
         let room = "";
+        let isLeader = false;
+        let roomLeaderName = "";
+        let roomLeaderId = "";
+        let currentStatus = "Not tracking";
+        let isDemoMode = false;
+        let isPerspectiveMode = false;
+        let myHeading = 0;
         let trackingInterval = null;
         let map = L.map('map', { zoomControl: false }).setView([28.6139, 77.2090], 13);
         L.control.zoom({ position: 'topright' }).addTo(map);
@@ -298,22 +411,128 @@
         let otherUsers = {};
 
         // Custom Icons
-        const getCustomIcon = (color, isMe = false) => L.divIcon({
+        const getCustomIcon = (color, isMe = false, heading = 0) => L.divIcon({
             className: 'custom-div-icon',
-            html: `<div style="background-color: ${color}; width: ${isMe ? '16px' : '12px'}; height: ${isMe ? '16px' : '12px'}; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
-            iconSize: isMe ? [16, 16] : [12, 12],
-            iconAnchor: isMe ? [8, 8] : [6, 6]
+            html: `
+                <div class="directional-icon" style="transform: rotate(${heading || 0}deg); position: relative;">
+                    <div style="background-color: ${color}; width: ${isMe ? '18px' : '14px'}; height: ${isMe ? '18px' : '14px'}; border: 2.5px solid white; border-radius: 50%; box-shadow: 0 0 12px rgba(0,0,0,0.4);"></div>
+                    ${(isMe || heading) ? `<div class="bearing-arrow" style="border-bottom-color: ${color}"></div>` : ''}
+                </div>
+            `,
+            iconSize: isMe ? [18, 18] : [14, 14],
+            iconAnchor: isMe ? [9, 9] : [7, 7]
         });
 
         const destIcon = L.icon({
             iconUrl: 'https://cdn-icons-png.flaticon.com/512/2776/2776067.png',
-            iconSize: [32, 32],
-            iconAnchor: [16, 32]
+            iconSize: [36, 36],
+            iconAnchor: [18, 36]
         });
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
+
+        // UI Helpers
+        function updateStatusBadge(message = null) {
+            if (message) currentStatus = message;
+            const statusEl = document.getElementById("status-display");
+
+            let badgeText = currentStatus;
+            let badgeClass = "status-badge";
+
+            if (currentStatus.includes("OFF ROUTE") || currentStatus.includes("error") || currentStatus.includes("Denied")) {
+                badgeClass += " status-off-route";
+            } else if (currentStatus === "On Route") {
+                badgeClass += " status-on-route";
+            }
+
+            if (isLeader) {
+                badgeClass += " status-leader";
+                badgeText += " (Leader)";
+            } else if (roomLeaderName) {
+                badgeText += ` (Ldr: ${roomLeaderName})`;
+            }
+
+            // Append distance if routing
+            if (myMarker && destinationMarker) {
+                const dist = getDistance(myMarker.getLatLng().lat, myMarker.getLatLng().lng,
+                    destinationMarker.getLatLng().lat, destinationMarker.getLatLng().lng);
+                badgeText += ` • ${(dist / 1000).toFixed(1)}km to dest`;
+            }
+
+            statusEl.innerText = badgeText;
+            statusEl.className = badgeClass;
+        }
+
+        function togglePerspective() {
+            isPerspectiveMode = !isPerspectiveMode;
+            document.getElementById("perspective-btn").classList.toggle("fab-active", isPerspectiveMode);
+            if (isPerspectiveMode && myMarker) {
+                const latlng = myMarker.getLatLng();
+                map.setView(latlng, 18, { animate: true });
+            }
+        }
+
+        function updateRoomInfo() {
+            const infoEl = document.getElementById("room-info");
+            if (!room) {
+                infoEl.innerText = "Join a room to start tracking.";
+                return;
+            }
+            let text = `Room: <b>${room}</b>`;
+            if (roomLeaderName) {
+                text += `<br>Leader: ${roomLeaderName} ${roomLeaderId === socket.id ? '(You)' : ''}`;
+            }
+            infoEl.innerHTML = text;
+        }
+
+        // Search Functionality
+        let searchTimeout = null;
+        function debounceSearch(query) {
+            clearTimeout(searchTimeout);
+            if (!query.trim()) {
+                document.getElementById("search-results").classList.add("hidden");
+                return;
+            }
+            searchTimeout = setTimeout(() => performSearch(query), 500);
+        }
+
+        async function performSearch(query) {
+            if (!isLeader) return;
+            const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`;
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                displaySearchResults(data);
+            } catch (err) {
+                console.error("Search error:", err);
+            }
+        }
+
+        function displaySearchResults(results) {
+            const container = document.getElementById("search-results");
+            container.innerHTML = "";
+            if (results.length === 0) {
+                container.classList.add("hidden");
+                return;
+            }
+
+            results.forEach(res => {
+                const div = document.createElement("div");
+                div.className = "search-item";
+                div.innerText = res.display_name;
+                div.onclick = () => {
+                    const lat = parseFloat(res.lat);
+                    const lon = parseFloat(res.lon);
+                    setDestination(lat, lon);
+                    container.classList.add("hidden");
+                    document.getElementById("destination-search").value = res.display_name;
+                };
+                container.appendChild(div);
+            });
+            container.classList.remove("hidden");
+        }
 
         // Ensure map renders correctly on load
         setTimeout(() => map.invalidateSize(), 500);
@@ -321,6 +540,10 @@
         // Click on map to set destination
         map.on('click', function (e) {
             if (!username) return;
+            if (!isLeader) {
+                alert("Only the room leader can set a destination.");
+                return;
+            }
             setDestination(e.latlng.lat, e.latlng.lng);
         });
 
@@ -384,8 +607,12 @@
             }
 
             socket.emit("join_room", { username, room });
-            document.getElementById("join-panel").classList.add("hidden");
-            document.getElementById("status-display").innerText = `Room: ${room}${isDemo ? ' (Demo)' : ''}`;
+            document.getElementById("join-form").classList.add("hidden");
+            document.getElementById("search-panel").classList.remove("hidden");
+
+            isDemoMode = isDemo;
+            updateStatusBadge(`Room: ${room}`);
+            updateRoomInfo();
 
             if (isDemo) {
                 simulateLocation();
@@ -398,21 +625,32 @@
             // Simulate Delhi location for demo purposes
             let lat = 28.6139 + (Math.random() - 0.5) * 0.01;
             let lng = 77.2090 + (Math.random() - 0.5) * 0.01;
+            let heading = 0;
 
             const update = () => {
-                lat += (Math.random() - 0.5) * 0.001;
-                lng += (Math.random() - 0.5) * 0.001;
+                const dLat = (Math.random() - 0.5) * 0.001;
+                const dLng = (Math.random() - 0.5) * 0.001;
+                lat += dLat;
+                lng += dLng;
+
+                heading = (Math.atan2(dLng, dLat) * 180 / Math.PI + 360) % 360;
 
                 if (myMarker) {
                     myMarker.setLatLng([lat, lng]);
+                    myMarker.setIcon(getCustomIcon('#3b82f6', true, heading));
                 } else {
-                    myMarker = L.marker([lat, lng], { icon: getCustomIcon('#3b82f6', true) })
+                    myMarker = L.marker([lat, lng], { icon: getCustomIcon('#3b82f6', true, heading) })
                         .addTo(map)
                         .bindPopup("<b>You (Demo)</b>");
                     map.setView([lat, lng], 15);
                 }
 
-                socket.emit("send_location", { lat, lng });
+                if (isPerspectiveMode) {
+                    map.setView([lat, lng], 18, { animate: true });
+                }
+
+                socket.emit("send_location", { lat, lng, heading });
+                updateStatusBadge();
                 checkOffRoute(lat, lng);
             };
 
@@ -423,27 +661,32 @@
         function startTracking() {
             if (trackingInterval) return; // In demo mode or already tracking
 
-            const statusEl = document.getElementById("status-display");
-            statusEl.innerText = "Locating...";
+            updateStatusBadge("Locating...");
 
             trackingInterval = navigator.geolocation.watchPosition(
                 (position) => {
-                    const { latitude: lat, longitude: lng } = position.coords;
+                    const { latitude: lat, longitude: lng, heading } = position.coords;
+                    myHeading = heading || 0;
 
                     if (myMarker) {
                         myMarker.setLatLng([lat, lng]);
+                        myMarker.setIcon(getCustomIcon('#3b82f6', true, myHeading));
                     } else {
-                        myMarker = L.marker([lat, lng], { icon: getCustomIcon('#3b82f6', true) })
+                        myMarker = L.marker([lat, lng], { icon: getCustomIcon('#3b82f6', true, myHeading) })
                             .addTo(map)
                             .bindPopup("<b>You</b>");
 
                         if (!routeLine) map.setView([lat, lng], 15);
-                        if (statusEl.innerText === "Locating...") {
-                            statusEl.innerText = `Room: ${room}`;
+                        if (currentStatus === "Locating...") {
+                            updateStatusBadge(`Room: ${room}`);
                         }
                     }
 
-                    socket.emit("send_location", { lat, lng });
+                    if (isPerspectiveMode) {
+                        map.setView([lat, lng], 18, { animate: true });
+                    }
+
+                    socket.emit("send_location", { lat, lng, heading: myHeading });
                     checkOffRoute(lat, lng);
                 },
                 (error) => {
@@ -452,8 +695,7 @@
                     if (error.code === 1) msg = "GPS Denied";
                     else if (error.code === 2) msg = "GPS Unavailable";
                     else if (error.code === 3) msg = "GPS Timeout";
-                    statusEl.innerText = msg;
-                    statusEl.className = "status-badge status-off-route";
+                    updateStatusBadge(msg);
                 },
                 {
                     enableHighAccuracy: true,
@@ -474,11 +716,9 @@
 
             const statusEl = document.getElementById("status-display");
             if (minDistance > 50) {
-                statusEl.innerText = `OFF ROUTE (${Math.round(minDistance)}m)`;
-                statusEl.className = "status-badge status-off-route";
+                updateStatusBadge(`OFF ROUTE (${Math.round(minDistance)}m)`);
             } else {
-                statusEl.innerText = "On Route";
-                statusEl.className = "status-badge status-on-route";
+                updateStatusBadge("On Route");
             }
         }
 
@@ -508,18 +748,54 @@
         }
 
         socket.on("receive_location", (data) => {
-            let { id, username: otherName, lat, lng } = data;
+            let { id, username: otherName, lat, lng, heading } = data;
             if (id === socket.id) return;
+
+            let popupContent = `<b>${otherName}</b>`;
+            if (destinationMarker) {
+                const dist = getDistance(lat, lng, destinationMarker.getLatLng().lat, destinationMarker.getLatLng().lng);
+                popupContent += `<br>${(dist / 1000).toFixed(1)}km to dest`;
+            }
 
             if (otherUsers[id]) {
                 otherUsers[id].setLatLng([lat, lng]);
+                otherUsers[id].setIcon(getCustomIcon(otherUsers[id].options.color, false, heading));
+                otherUsers[id].getPopup().setContent(popupContent);
             } else {
                 const colors = ['#e11d48', '#10b981', '#6366f1', '#f59e0b', '#8b5cf6'];
                 const color = colors[Object.keys(otherUsers).length % colors.length];
-                otherUsers[id] = L.marker([lat, lng], { icon: getCustomIcon(color) })
+                otherUsers[id] = L.marker([lat, lng], {
+                    icon: getCustomIcon(color, false, heading),
+                    color: color // Store color for setIcon updates
+                })
                     .addTo(map)
-                    .bindPopup(`<b>${otherName}</b>`);
+                    .bindPopup(popupContent);
             }
+        });
+
+        socket.on("leader_update", (data) => {
+            roomLeaderId = data.leaderId;
+            roomLeaderName = data.leaderName;
+            isLeader = (roomLeaderId === socket.id);
+
+            updateStatusBadge();
+            updateRoomInfo();
+
+            // Disable/Hide search for non-leaders
+            const searchInput = document.getElementById("destination-search");
+            const searchPanel = document.getElementById("search-panel");
+            if (isLeader) {
+                searchInput.disabled = false;
+                searchInput.placeholder = "Search for a place...";
+                searchPanel.classList.remove("hidden");
+            } else {
+                searchInput.disabled = true;
+                searchInput.placeholder = "Only Leader can set destination";
+                searchPanel.classList.add("hidden");
+                document.getElementById("search-results").classList.add("hidden");
+            }
+
+            console.log("Leader update:", data);
         });
 
         socket.on("user_left", (id) => {
