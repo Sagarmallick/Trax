@@ -117,7 +117,7 @@
 
         /* Controls Panel */
         .controls-panel {
-            bottom: 24px;
+            bottom: 0px;
             left: 50%;
             transform: translateX(-50%);
             width: calc(100% - 32px);
@@ -437,7 +437,7 @@
         <div id="join-form" class="input-group">
             <h2 style="margin: 0 0 8px 0; font-size: 1.1rem;">Join Group</h2>
             <input id="username" type="text" placeholder="Your Name" autocomplete="off">
-            <input id="room" type="text" placeholder="Room Code" autocomplete="off">
+            <input id="room" type="text" placeholder="Invite Code" autocomplete="off">
             <button onclick="joinRoom()">
                 Join Room
             </button>
@@ -490,6 +490,7 @@
 
         let username = "";
         let room = "";
+        let inviteCode = "";
         let isLeader = false;
         let roomLeaderName = "";
         let roomLeaderId = "";
@@ -633,13 +634,16 @@
 
         function updateRoomInfo() {
             const infoEl = document.getElementById("room-info");
-            if (!room) {
+            if (!room && !inviteCode) {
                 infoEl.innerText = "Join a room to start tracking.";
                 return;
             }
-            let text = `Room: <b>${room}</b>`;
+            let text = `<div style="background: rgba(255,255,255,0.1); padding: 2px; border-radius: 12px; margin-bottom: 0px; border: 1px solid rgba(255,255,255,0.2);">
+                <div style="font-size: 0.65rem; text-transform: uppercase; color: var(--text-light); font-weight: bold; margin-bottom: 4px;">Share Invite Code</div>
+                <div style="color: green; font-size: 1.2rem; font-weight: 800; letter-spacing: 2px;">${inviteCode || '...'}</div>
+            </div>`;
             if (roomLeaderName) {
-                text += `<br>Leader: ${roomLeaderName} ${roomLeaderId === socket.id ? '(You)' : ''}`;
+                text += `<div style="font-size: 0.85rem; color: var(--text-light);">Leader: <b>${roomLeaderName}</b> ${roomLeaderId === socket.id ? '(You)' : ''}</div>`;
             }
             infoEl.innerHTML = text;
         }
@@ -756,14 +760,14 @@
 
         function joinRoom(isDemo = false) {
             username = document.getElementById("username").value || (isDemo ? "Demo User" : "");
-            room = document.getElementById("room").value || (isDemo ? "DEMO1" : "");
+            const code = document.getElementById("room").value || (isDemo ? "DEMO1" : "");
 
-            if (!username || !room) {
-                alert("Please enter both name and room code");
+            if (!username) {
+                alert("Please enter your name");
                 return;
             }
 
-            socket.emit("join_room", { username, room });
+            socket.emit("join_room", { username, inviteCode: code });
             document.getElementById("join-form").classList.add("hidden");
             document.getElementById("search-panel").classList.remove("hidden");
 
@@ -1095,8 +1099,11 @@
         });
 
         socket.on("leader_update", (data) => {
+            console.log("Leader Update Received:", data);
             roomLeaderId = data.leaderId;
             roomLeaderName = data.leaderName;
+            inviteCode = data.inviteCode;
+            room = data.room || room;
             isLeader = (roomLeaderId === socket.id);
 
             updateStatusBadge();

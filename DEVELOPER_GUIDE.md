@@ -33,32 +33,28 @@ trax/
 ### 1. Connection & Room Management
 The app uses **Socket.io rooms** to isolate group tracking.
 - When a user joins, they are added to a specific room based on the "Room Code".
-- **Leader System**: The first person to join a room is assigned as the **Leader**. The server broadcasts `leader_update` to all participants, ensuring everyone knows who the current leader is.
-- **Dynamic Promotion**: If the leader leaves, the server automatically promotes the next available member to Leader status and notifies the room.
-- The app uses a **hybrid persistence model**:
-    - **In-memory**: Active user lists and live location updates are strictly in-memory for zero-latency broadcasting.
-    - **MongoDB**: Rooms and shared Routes are persisted to a database (`trax` db) to survive server restarts.
-- **Auto-Recovery**: On server startup, the system automatically reloads any stored routes into memory, ensuring active sessions remain functional.
+- **Robust Leader System**:
+    - The first person to join a room is assigned as the **Leader**.
+    - **Active Verification**: Before assigning or reclaiming leadership, the server verifies if the current leader's socket is actually connected in the room. This prevents "zombie" sessions from blocking leadership.
+    - **Dynamic Promotion**: If the leader leaves, the server promotes the next available member and notifies the room via the `leader_update` event.
+    - **DB Sync**: Leadership status is synchronized with the MongoDB `Room` model in real-time.
+- **Database Connectivity**:
+    - **Fast-Fail Connection**: MongoDB connection is configured with a `serverSelectionTimeoutMS` of 5000ms. If the DB is unreachable, the server fails fast instead of hanging.
+    - **Buffer-Free Operations**: Mongoose command buffering is managed to prevent operations from queueing indefinitely when the database is down.
+    - **Status Monitoring**: On every connection, the server emits a `mongodb_status` event to the client to confirm database readiness.
 
-### 2. Location Tracking & Navigation
-- **Real-time**: High-accuracy tracking using `navigator.geolocation.watchPosition`, now including **heading/bearing** data and **speed** calculation.
-- **Compass Integration**: Uses the `deviceorientation` API for precise orientation.
-- **Perspective Mode**: Rotates the map so the user's heading points "up".
-- **Auto Re-route**: If a user is significantly off-route, the app automatically generates a private "guide back" route (dashed line) to the destination.
-- **Group Metrics**: Calculates real-time distances to the Leader and the "Last Rider" (furthest from destination).
-- **Spread Visualization**: Draws a bounding box around all group members to show spatial spread.
-- **Speed Alerts**: Detects and flags users who are "TOO FAST" or "LAGGING" relative to the group average.
+### 2. Real-time Persistence
+- **In-memory**: Active user lists and live location updates are strictly in-memory for zero-latency broadcasting.
+- **MongoDB**: 
+    - **Rooms**: Persistent leadership and room metadata.
+    - **Routes**: Active and previous destinations are saved to ensure sessions survive server restarts (auto-reloaded on startup via `loadActiveRoutes`).
 
-### 3. Shared Routing & Search
-- **Manual Selection**: Leaders can click on the map to set a destination.
-- **Top Search Bar**: A search bar is integrated into the header (Leader only), powered by the **Nominatim API**.
-- The client fetches the optimal driving path from the **OSRM API**.
-- This route is broadcast to all users in the room via the `set_route` event.
-- New joiners automatically receive the active route upon joining.
-
-### 4. Route Adherence (Off-Route Detection)
-- The app calculates the distance between the user's current location and the nearest point on the active polyline route.
-- If the distance exceeds **50 meters**, the UI displays an "OFF ROUTE" alert with a pulse animation.
+### 3. UI/UX & Map Dynamics
+- **Mobile-First UX**: Recent updates have optimized the layout for mobile viewports, including:
+    - **Glassmorphism Refinement**: Reduced blur (`blur(2px)`) for better performance and readability.
+    - **Interface Positioning**: Relocated floating action buttons and zoom controls to avoid interference with system navigation bars.
+- **Route Adherence**: Calculates distance to the track. If >50m, user is "OFF ROUTE". If >100m, an **Auto Re-route** (dashed path) is generated privately for that user.
+- **Group Metrics**: Displays real-time distances to the Leader and calculates whole-group spread.
 
 ---
 
@@ -68,35 +64,24 @@ The app uses **Socket.io rooms** to isolate group tracking.
 | :--- | :--- | :--- | :--- |
 | `join_room` | Client -> Server | `{ username, room }` | Joins a room and initializes session. |
 | `leader_update` | Server -> Client | `{ leaderId, leaderName }` | Notifies the room of the current leader's identity. |
-| `send_location` | Client -> Server | `{ lat, lng }` | Sends current GPS coordinates. |
-| `receive_location` | Server -> Client | `{ id, username, lat, lng }` | Updates other users' pins on the map. |
-| `set_route` | Client -> Server | `{ destination, coordinates }` | Sets a new shared destination and path (Leader Only). |
-| `route_received` | Server -> Client | `{ destination, coordinates }` | Renders the path polyline for all users. |
-| `user_left` | Server -> Client | `socketId` | Removes a user's marker when they disconnect. |
+| `mongodb_status`| Server -> Client | `{ connected, status }` | Reports the current DB connection state. |
+| `error_message` | Server -> Client | `string` | General error channel for alerts. |
+| `send_location` | Client -> Server | `{ lat, lng, heading }` | Sends current GPS coordinates and bearing. |
+| `receive_location`| Server -> Client | `{ id, username, lat, lng, heading }` | Updates other users' pins and orientation. |
+| `set_route` | Client -> Server | `{ destination, coordinates }` | Sets shared destination (Leader Only). |
+| `user_left` | Server -> Client | `socketId` | Removes a user's marker on disconnect. |
 
 ---
 
-## 🚀 Step-by-Step Implementation Guide
+## 🚀 Troubleshooting & Deployment (Render)
 
-### Phase 1: Server Setup
-1. Initialize Express and HTTP server.
-2. Integrate Socket.io.
-3. Set up static file serving for the `/client` directory.
+### 1. MongoDB Connection Issue (`Buffering Timeout`)
+If the logs show "MongooseError: Operation ... buffering timed out after 10000ms":
+- **IP Whitelist**: Ensure your MongoDB Atlas is set to allow access from anywhere (`0.0.0.0/0`) during deployment, as Render IPs change.
+- **Environment Variables**: Verify `MONGODB_URI` is correctly populated in the Render Dashboard -> Environment section.
 
-### Phase 2: Client Interface
-1. Load Leaflet.css and Socket.io client.
-2. Create a full-screen `#map` container.
-3. Design the glassmorphism UI for Join Panel and Status Badge.
-
-### Phase 3: Real-time Logic
-1. Implement `joinRoom()` to emit socket events and hide the overlay.
-2. Set up `watchPosition` to feed data to `send_location`.
-3. Listen for `receive_location` to create or update Leaflet markers for other participants.
-
-### Phase 4: Routing & Refinement
-1. Add map click listeners to trigger OSRM API calls.
-2. Implement `L.polyline` rendering for shared routes.
-3. Add the distance calculation logic for off-route alerts.
+### 2. Leadership Status Missing
+- Check if multiple instances are running. Trax uses in-memory leadership; ensure Render is set to **1 instance** unless a Redis adapter is added for Socket.io.
 
 ---
 
@@ -108,4 +93,4 @@ The app uses **Socket.io rooms** to isolate group tracking.
 
 ---
 
-*Happy Coding!* 🛰️
+*Knowledge Transfer Complete. Happy Coding!* 🛰️

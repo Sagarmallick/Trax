@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const RoomSchema = new mongoose.Schema({
     roomId: { type: String, required: true, unique: true },
+    inviteCode: { type: String, required: true, unique: true },
     leaderId: { type: String, required: true },
     createdAt: { type: Date, default: Date.now },
     isActive: { type: Boolean, default: true }

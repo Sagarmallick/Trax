@@ -47,6 +47,13 @@ let userLocations = {}; // Track last known location of each user
 let roomRoutes = {}; // Track the current route for each room
 let roomLeaders = {}; // Track the leader (socket.id) of each room
 
+// Helper to generate invite codes
+function generateInviteCode() {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const randomPart = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    return `RIDE-${randomPart}`;
+}
+
 // Load routes on startup
 async function loadActiveRoutes() {
     try {
@@ -74,7 +81,13 @@ io.on("connection", (socket) => {
 
     // Join Room
     socket.on("join_room", async (data) => {
-        const { username, room } = data;
+        // Send MongoDB connection status
+        socket.emit("mongodb_status", {
+            connected: mongoose.connection.readyState === 1,
+            status: mongoose.connection.readyState === 1 ? "Connected" : "Disconnected"
+        });
+
+        const { username, inviteCode } = data;
 
         // Handle DB disconnected state early
         if (mongoose.connection.readyState !== 1) {
@@ -83,20 +96,36 @@ io.on("connection", (socket) => {
             // Continue with in-memory logic anyway so they can at least use the app
         }
 
-        socket.join(room);
-
-        users[socket.id] = {
-            username,
-            room
-        };
-
-        // Persistent Room Logic
         try {
-            let roomDoc = await Room.findOne({ roomId: room });
-            if (!roomDoc) {
-                roomDoc = await Room.create({ roomId: room, leaderId: socket.id });
-                console.log(`Room ${room} created in DB`);
+            let roomDoc;
+            let room;
+
+            if (inviteCode) {
+                // Joining existing room via code
+                roomDoc = await Room.findOne({ inviteCode: inviteCode.trim().toUpperCase() });
+                if (!roomDoc) {
+                    socket.emit("error_message", "Invalid invite code.");
+                    return;
+                }
+                room = roomDoc.roomId;
+            } else {
+                // Creating new room (no code provided)
+                room = Math.random().toString(36).substring(2, 10);
+                const newCode = generateInviteCode();
+                roomDoc = await Room.create({
+                    roomId: room,
+                    inviteCode: newCode,
+                    leaderId: socket.id
+                });
+                console.log(`Room ${room} (Code: ${newCode}) created in DB`);
             }
+
+            socket.join(room);
+
+            users[socket.id] = {
+                username,
+                room
+            };
 
             // Assign leader in memory
             const currentLeaderId = roomLeaders[room];
@@ -109,12 +138,17 @@ io.on("connection", (socket) => {
                 await Room.findOneAndUpdate({ roomId: room }, { leaderId: socket.id }, { upsert: true });
             }
 
-            // Broadcast current leader
+            // Broadcast current leader AND room info (including invite code)
             const leaderId = roomLeaders[room];
             const leaderName = users[leaderId] ? users[leaderId].username : "Unknown";
-            io.in(room).emit("leader_update", { leaderId, leaderName });
+            io.in(room).emit("leader_update", {
+                leaderId,
+                leaderName,
+                inviteCode: roomDoc.inviteCode,
+                room: roomDoc.roomId
+            });
 
-            console.log(`${username} joined room ${room}`);
+            console.log(`${username} joined room ${room} via code ${roomDoc.inviteCode}`);
 
             // Send existing users' locations (In-memory only)
             Object.entries(users)
