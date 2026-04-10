@@ -20,7 +20,7 @@
             --text: #1e293b;
             --text-light: #64748b;
             --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-            --glass: blur(12px) saturate(180%);
+            --glass: blur(2px) saturate(180%);
         }
 
         * {
@@ -125,13 +125,14 @@
             background: var(--surface);
             backdrop-filter: var(--glass);
             -webkit-backdrop-filter: var(--glass);
-            padding: 20px;
+            padding: 2px;
             border-radius: 24px;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.3);
         }
 
         .input-group {
+            padding: 18px;
             display: flex;
             flex-direction: column;
             gap: 12px;
@@ -185,8 +186,8 @@
 
         /* Floating buttons */
         .floating-action {
-            right: 16px;
-            bottom: 200px;
+            right: 10px;
+            top: 30%;
             display: flex;
             flex-direction: column;
             gap: 12px;
@@ -245,6 +246,10 @@
         .search-container {
             position: relative;
             /* margin-bottom: 12px; */
+        }
+
+        .leaflet-top {
+            top: 15%;
         }
 
         .search-results {
@@ -306,6 +311,7 @@
             align-items: stretch;
             gap: 12px;
             padding: 16px;
+            background: transparent;
         }
 
         .header-top {
@@ -338,7 +344,8 @@
             bottom: 24px;
             right: 24px;
             width: 260px;
-            background: var(--surface);
+            /* background: var(--surface); */
+            background: transparent;
             backdrop-filter: var(--glass);
             padding: 16px;
             border-radius: 16px;
@@ -404,7 +411,7 @@
             <!-- Search Panel (Top) -->
             <div id="search-panel" class="header-search hidden">
                 <div class="search-container">
-                    <input id="destination-search" type="text" placeholder="Search for a place..." autocomplete="off"
+                    <input id="destination-search" type="text" placeholder="Search for a place" autocomplete="off"
                         oninput="debounceSearch(this.value)">
                     <div id="search-results" class="search-results hidden"></div>
                 </div>
@@ -1100,7 +1107,7 @@
             const searchPanel = document.getElementById("search-panel");
             if (isLeader) {
                 searchInput.disabled = false;
-                searchInput.placeholder = "Search for a place...";
+                searchInput.placeholder = "Search for a place";
                 searchPanel.classList.remove("hidden");
             } else {
                 searchInput.disabled = true;
