@@ -102,7 +102,12 @@ io.on("connection", (socket) => {
 
             if (inviteCode) {
                 // Joining existing room via code
-                roomDoc = await Room.findOne({ inviteCode: inviteCode.trim().toUpperCase() });
+                roomDoc = await Room.findOneAndUpdate(
+                    { inviteCode: inviteCode.trim().toUpperCase() },
+                    { isActive: true }, // Refreshes updatedAt
+                    { new: true }
+                );
+
                 if (!roomDoc) {
                     socket.emit("error_message", "Invalid invite code.");
                     return;
@@ -134,8 +139,8 @@ io.on("connection", (socket) => {
             if (!roomLeaders[room] || !isLeaderStillConnected) {
                 roomLeaders[room] = socket.id;
                 console.log(`Leader assigned for room ${room}: ${username}`);
-                // Sync to DB
-                await Room.findOneAndUpdate({ roomId: room }, { leaderId: socket.id }, { upsert: true });
+                // Sync to DB and refresh activity
+                await Room.findOneAndUpdate({ roomId: room }, { leaderId: socket.id, isActive: true }, { upsert: true });
             }
 
             // Broadcast current leader AND room info (including invite code)
