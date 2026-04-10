@@ -68,16 +68,16 @@ export function updateStatusBadge(message = null) {
 
 export function updateRoomInfo(socketId) {
     const infoEl = document.getElementById("room-info");
+    const summaryEl = document.getElementById("dashboard-summary-text");
+
     if (!state.room && !state.inviteCode) {
-        infoEl.innerText = "Join a room to start tracking.";
+        if (infoEl) infoEl.innerText = "Join a room to start tracking.";
         return;
     }
+
     let text = `<div style="background: rgba(255,255,255,0.1); padding: 2px; border-radius: 12px; margin-bottom: 0px; border: 1px solid rgba(255,255,255,0.2);">
         <div style="color: green; font-size: 1.2rem; font-weight: 800; letter-spacing: 2px;">${state.inviteCode || '...'}</div>
     </div>`;
-    if (state.roomLeaderName) {
-        text += `<div style="font-size: 0.85rem; color: var(--text-light); margin-bottom: 8px;">Leader: <b>${state.roomLeaderName}</b> ${state.roomLeaderId === socketId ? '(You)' : ''}</div>`;
-    }
 
     // Dynamic Navigation Metrics (Main Visibility)
     if (state.myMarker && state.destinationMarker && state.currentRouteCoords.length > 0) {
@@ -93,7 +93,7 @@ export function updateRoomInfo(socketId) {
         const km = (roadDist / 1000).toFixed(1);
         const mins = Math.ceil(remainingDuration / 60);
 
-        text += `
+        const metricsHtml = `
             <div style="background: var(--primary); color: white; padding: 12px; border-radius: 12px; display: flex; justify-content: space-around; align-items: center; margin-top: 8px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);">
                 <div style="text-align: center;">
                     <div style="font-size: 0.7rem; text-transform: uppercase; opacity: 0.8;">Distance</div>
@@ -106,9 +106,15 @@ export function updateRoomInfo(socketId) {
                 </div>
             </div>
         `;
+        text += metricsHtml;
+
+        // Update Summary Text
+        if (summaryEl) summaryEl.innerText = `${km}km • ${mins}m`;
+    } else {
+        if (summaryEl) summaryEl.innerText = `Room: ${state.inviteCode}`;
     }
 
-    infoEl.innerHTML = text;
+    if (infoEl) infoEl.innerHTML = text;
 }
 
 export function displaySearchResults(results, onSelect) {
@@ -219,4 +225,9 @@ export function updateGroupStats() {
             }
         });
     }
+}
+
+export function toggleStats() {
+    const el = document.getElementById("group-stats");
+    el.classList.toggle("collapsed");
 }

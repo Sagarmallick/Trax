@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { setupSocketHandlers } from './socket-handlers.js';
 import { initMap, togglePerspective, locateMe, centerRoute, setDestination, checkOffRoute, rotateMap } from './map-engine.js';
-import { updateStatusBadge, updateRoomInfo, displaySearchResults, updateGroupStats, getDistance } from './ui-utils.js';
+import { updateStatusBadge, updateRoomInfo, displaySearchResults, updateGroupStats, getDistance, toggleStats } from './ui-utils.js';
 import { getCustomIcon } from './config.js';
 
 const socket = io();
@@ -13,8 +13,9 @@ window.togglePerspective = togglePerspective;
 window.locateMe = locateMe;
 window.centerRoute = centerRoute;
 window.debounceSearch = debounceSearch;
+window.toggleStats = toggleStats;
 
-document.addEventListener('DOMContentLoaded', () => {
+function startApp() {
     initMap();
     setTimeout(() => state.map.invalidateSize(), 500);
 
@@ -27,7 +28,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         setDestination(e.latlng.lat, e.latlng.lng, socket);
     });
-});
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startApp);
+} else {
+    startApp();
+}
 
 function joinRoom(isDemo = false) {
     state.username = document.getElementById("username").value || (isDemo ? "Demo User" : "");

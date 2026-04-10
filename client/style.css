@@ -8,7 +8,7 @@
     --text: #1e293b;
     --text-light: #64748b;
     --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    --glass: blur(2px) saturate(180%);
+    --glass: blur(1px) saturate(180%);
 }
 
 * {
@@ -326,23 +326,72 @@ button:hover {
     box-shadow: 0 0 15px var(--primary);
 }
 
-/* Group Stats Panel */
+/* Surgical Stats Dashboard */
 .stats-overlay {
     position: absolute;
     bottom: 24px;
     right: 24px;
-    width: 260px;
+    width: 280px;
     /* background: var(--surface); */
-    background: transparent;
     backdrop-filter: var(--glass);
-    padding: 16px;
+    -webkit-backdrop-filter: var(--glass);
+    padding: 12px;
     border-radius: 16px;
     box-shadow: var(--shadow);
     z-index: 1000;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     border: 1px solid rgba(255, 255, 255, 0.4);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: transparent;
+}
+
+.dashboard-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+    padding-bottom: 4px;
+}
+
+#dashboard-indicator {
+    transition: transform 0.3s ease;
+    font-size: 0.8rem;
+    color: var(--primary);
+}
+
+#dashboard-summary-text {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+}
+
+#dashboard-details {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: max-height 0.3s ease, opacity 0.2s ease;
+    overflow: hidden;
+}
+
+.stats-overlay.collapsed #dashboard-details {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+    pointer-events: none;
+}
+
+.stats-overlay.collapsed #dashboard-indicator {
+    transform: rotate(180deg);
+}
+
+.stats-divider {
+    height: 1px;
+    background: rgba(0, 0, 0, 0.05);
+    margin: 4px 0;
 }
 
 .stats-item {
@@ -379,9 +428,15 @@ button:hover {
 
 @media screen and (max-width: 768px) {
     .stats-overlay {
-        bottom: 150px;
+        bottom: 20px;
         right: 12px;
         left: 12px;
         width: auto;
+    }
+
+    .stats-overlay.collapsed {
+        left: unset;
+        right: 12px;
+        width: 180px;
     }
 }

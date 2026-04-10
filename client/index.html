@@ -56,25 +56,34 @@
             </button>
         </div>
 
-        <p id="room-info" style="font-size: 0.75rem; color: var(--text-light); margin-top: 12px; text-align: center;">
-            Join a room to start tracking.
-        </p>
+        <!-- room-info moved to consolidated dashboard -->
     </div>
 
-    <!-- Group Stats Overlay (Initially Hidden) -->
-    <div id="group-stats" class="overlay stats-overlay hidden">
-        <h3 style="margin: 0; font-size: 0.9rem;">Group Metrics</h3>
-        <div id="rider-list"
-            style="max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
-            <!-- Dynamic Rider Items -->
+    <!-- Surgical Stats Dashboard -->
+    <div id="group-stats" class="overlay stats-overlay hidden collapsed">
+        <div class="dashboard-toggle" onclick="toggleStats()">
+            <span id="dashboard-indicator">▲</span>
+            <div id="dashboard-summary-text">Tracking...</div>
         </div>
-        <div style="border-top: 1px solid rgba(255,255,255,0.2); padding-top: 8px;">
+        <div id="dashboard-details">
+            <div id="room-info-container">
+                <p id="room-info" style="font-size: 0.75rem; color: var(--text-light); margin: 0; text-align: center;">
+                    Join a room to start tracking.
+                </p>
+            </div>
+            <div class="stats-divider"></div>
+            <h3 style="margin: 0; font-size: 0.9rem;">Group Metrics</h3>
+            <div id="rider-list"
+                style="max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                <!-- Dynamic Rider Items -->
+            </div>
+            <div class="stats-divider"></div>
             <div class="stats-item">
-                <span class="stats-label">Group Spread (Radius)</span>
+                <span class="stats-label">Group Spread</span>
                 <span id="group-spread" class="stats-value">-</span>
             </div>
+            <div id="speed-alerts" style="margin-top: 4px;"></div>
         </div>
-        <div id="speed-alerts" style="margin-top: 4px;"></div>
     </div>
 
     <!-- Map -->
