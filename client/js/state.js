@@ -1,0 +1,26 @@
+// Global Application State
+export const state = {
+    username: "",
+    room: "",
+    inviteCode: "",
+    isLeader: false,
+    roomLeaderName: "",
+    roomLeaderId: "",
+    currentStatus: "Not tracking",
+    isDemoMode: false,
+    isPerspectiveMode: false,
+    myHeading: 0,
+    myCompassHeading: 0,
+    trackingInterval: null,
+    map: null,
+    routeLine: null,
+    destinationMarker: null,
+    currentRouteCoords: [],
+    rerouteLine: null,
+    myMarker: null,
+    myPrevPos: null,
+    myLastTime: null,
+    mySpeed: 0,
+    otherUsers: {},
+    spreadHull: null
+};
