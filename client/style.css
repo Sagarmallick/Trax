@@ -379,7 +379,7 @@ button:hover {
 
 @media screen and (max-width: 768px) {
     .stats-overlay {
-        bottom: 100px;
+        bottom: 150px;
         right: 12px;
         left: 12px;
         width: auto;

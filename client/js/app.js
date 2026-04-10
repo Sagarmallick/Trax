@@ -97,6 +97,7 @@ function simulateLocation() {
         updateStatusBadge();
         checkOffRoute(lat, lng);
         updateGroupStats();
+        updateRoomInfo(socket.id);
     };
 
     update();
@@ -147,6 +148,7 @@ function startTracking() {
             socket.emit("send_location", { lat, lng, heading: state.myHeading });
             checkOffRoute(lat, lng);
             updateGroupStats();
+            updateRoomInfo(socket.id);
         },
         (error) => {
             console.error("Location error:", error);

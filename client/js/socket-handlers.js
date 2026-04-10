@@ -17,8 +17,10 @@ export function setupSocketHandlers(socket) {
     });
 
     socket.on("route_received", (data) => {
-        const { destination, coordinates } = data;
+        const { destination, coordinates, distance, duration } = data;
         state.currentRouteCoords = coordinates;
+        state.currentRouteDistance = distance || 0;
+        state.currentRouteDuration = duration || 0;
         document.getElementById('route-toggle').classList.remove('hidden');
 
         if (state.destinationMarker) {
@@ -39,6 +41,9 @@ export function setupSocketHandlers(socket) {
             }).addTo(state.map);
         }
         state.map.fitBounds(state.routeLine.getBounds(), { padding: [50, 50] });
+
+        // Refresh UI with metrics if we already have our location
+        updateRoomInfo(socket.id);
     });
 
     socket.on("receive_location", (data) => {

@@ -12,10 +12,15 @@ export const state = {
     myHeading: 0,
     myCompassHeading: 0,
     trackingInterval: null,
+
+    // Navigation metrics
+    currentRouteDistance: 0, // In meters
+    currentRouteDuration: 0, // In seconds
+    currentRouteCoords: [],
+
     map: null,
     routeLine: null,
     destinationMarker: null,
-    currentRouteCoords: [],
     rerouteLine: null,
     myMarker: null,
     myPrevPos: null,

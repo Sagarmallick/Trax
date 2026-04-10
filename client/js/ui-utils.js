@@ -15,6 +15,28 @@ export function getDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
+export function getRemainingDistance(lat, lng, coords) {
+    if (!coords || coords.length < 2) return 0;
+
+    let minDistance = Infinity;
+    let closestIndex = 0;
+
+    for (let i = 0; i < coords.length; i++) {
+        const d = getDistance(lat, lng, coords[i][0], coords[i][1]);
+        if (d < minDistance) {
+            minDistance = d;
+            closestIndex = i;
+        }
+    }
+
+    let total = minDistance;
+    for (let i = closestIndex; i < coords.length - 1; i++) {
+        total += getDistance(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1]);
+    }
+
+    return total;
+}
+
 export function updateStatusBadge(message = null) {
     if (message) state.currentStatus = message;
     const statusEl = document.getElementById("status-display");
@@ -35,11 +57,9 @@ export function updateStatusBadge(message = null) {
         badgeText += ` (Ldr: ${state.roomLeaderName})`;
     }
 
-    // Append distance if routing
-    if (state.myMarker && state.destinationMarker) {
-        const dist = getDistance(state.myMarker.getLatLng().lat, state.myMarker.getLatLng().lng,
-            state.destinationMarker.getLatLng().lat, state.destinationMarker.getLatLng().lng);
-        badgeText += ` • ${(dist / 1000).toFixed(1)}km to dest`;
+    // Append distance if routing (Keeping top badge for status, but metrics moved to bottom for visibility)
+    if (state.myMarker && state.destinationMarker && state.currentRouteCoords.length > 0) {
+        // We'll keep the text clean here just for 'On Route'/'OFF ROUTE'
     }
 
     statusEl.innerText = badgeText;
@@ -53,12 +73,41 @@ export function updateRoomInfo(socketId) {
         return;
     }
     let text = `<div style="background: rgba(255,255,255,0.1); padding: 2px; border-radius: 12px; margin-bottom: 0px; border: 1px solid rgba(255,255,255,0.2);">
-        <div style="font-size: 0.65rem; text-transform: uppercase; color: var(--text-light); font-weight: bold; margin-bottom: 4px;">Share Invite Code</div>
         <div style="color: green; font-size: 1.2rem; font-weight: 800; letter-spacing: 2px;">${state.inviteCode || '...'}</div>
     </div>`;
     if (state.roomLeaderName) {
-        text += `<div style="font-size: 0.85rem; color: var(--text-light);">Leader: <b>${state.roomLeaderName}</b> ${state.roomLeaderId === socketId ? '(You)' : ''}</div>`;
+        text += `<div style="font-size: 0.85rem; color: var(--text-light); margin-bottom: 8px;">Leader: <b>${state.roomLeaderName}</b> ${state.roomLeaderId === socketId ? '(You)' : ''}</div>`;
     }
+
+    // Dynamic Navigation Metrics (Main Visibility)
+    if (state.myMarker && state.destinationMarker && state.currentRouteCoords.length > 0) {
+        const myPos = state.myMarker.getLatLng();
+        const roadDist = getRemainingDistance(myPos.lat, myPos.lng, state.currentRouteCoords);
+
+        let remainingDuration = 0;
+        if (state.currentRouteDistance > 0) {
+            const ratio = roadDist / state.currentRouteDistance;
+            remainingDuration = state.currentRouteDuration * ratio;
+        }
+
+        const km = (roadDist / 1000).toFixed(1);
+        const mins = Math.ceil(remainingDuration / 60);
+
+        text += `
+            <div style="background: var(--primary); color: white; padding: 12px; border-radius: 12px; display: flex; justify-content: space-around; align-items: center; margin-top: 8px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);">
+                <div style="text-align: center;">
+                    <div style="font-size: 0.7rem; text-transform: uppercase; opacity: 0.8;">Distance</div>
+                    <div style="font-size: 1.2rem; font-weight: 700;">${km} km</div>
+                </div>
+                <div style="width: 1px; height: 24px; background: rgba(255,255,255,0.3);"></div>
+                <div style="text-align: center;">
+                    <div style="font-size: 0.7rem; text-transform: uppercase; opacity: 0.8;">Arrival</div>
+                    <div style="font-size: 1.2rem; font-weight: 700;">${mins} min</div>
+                </div>
+            </div>
+        `;
+    }
+
     infoEl.innerHTML = text;
 }
 

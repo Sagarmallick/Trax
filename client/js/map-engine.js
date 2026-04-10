@@ -103,7 +103,9 @@ export async function setDestination(lat, lng, socket) {
             const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
             socket.emit("set_route", {
                 destination: { lat, lng },
-                coordinates: coords
+                coordinates: coords,
+                distance: data.routes[0].distance,
+                duration: data.routes[0].duration
             });
         }
     } catch (error) {
