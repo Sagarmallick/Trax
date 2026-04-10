@@ -11,12 +11,33 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || "mongodb://localhost:27017/trax")
+const mongoOptions = {
+    serverSelectionTimeoutMS: 5000, // Fail fast if can't connect
+    socketTimeoutMS: 45000,
+};
+
+const mongoUri = process.env.MONGODB_URI || "mongodb://localhost:27017/trax";
+const maskedUri = mongoUri.replace(/\/\/(.*):(.*)@/, "//***:***@");
+console.log(`Attempting to connect to MongoDB: ${maskedUri}`);
+
+mongoose.connect(mongoUri, mongoOptions)
     .then(() => {
-        console.log("Connected to MongoDB");
+        console.log("✅ Successfully connected to MongoDB");
         loadActiveRoutes();
     })
-    .catch(err => console.error("MongoDB connection error:", err));
+    .catch(err => {
+        console.error("❌ MongoDB connection error:", err.message);
+        console.error("TIP: Check your MONGODB_URI and IP Whitelist in Atlas.");
+    });
+
+// Connection event listeners
+mongoose.connection.on('error', err => {
+    console.error('Mongoose connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+    console.warn('Mongoose disconnected. Group data will not be persisted.');
+});
 
 // Serve client folder
 app.use(express.static(path.join(__dirname, "../client")));
@@ -45,9 +66,22 @@ async function loadActiveRoutes() {
 io.on("connection", (socket) => {
     console.log("User connected:", socket.id);
 
+    // Send MongoDB connection status
+    socket.emit("mongodb_status", {
+        connected: mongoose.connection.readyState === 1,
+        status: mongoose.connection.readyState === 1 ? "Connected" : "Disconnected"
+    });
+
     // Join Room
     socket.on("join_room", async (data) => {
         const { username, room } = data;
+
+        // Handle DB disconnected state early
+        if (mongoose.connection.readyState !== 1) {
+            console.warn(`Join room failed for ${username}: Database not connected.`);
+            socket.emit("error_message", "Database is not connected. Group tracking might not work correctly.");
+            // Continue with in-memory logic anyway so they can at least use the app
+        }
 
         socket.join(room);
 
@@ -65,9 +99,14 @@ io.on("connection", (socket) => {
             }
 
             // Assign leader in memory
-            if (!roomLeaders[room]) {
+            const currentLeaderId = roomLeaders[room];
+            const isLeaderStillConnected = currentLeaderId && io.sockets.sockets.has(currentLeaderId);
+
+            if (!roomLeaders[room] || !isLeaderStillConnected) {
                 roomLeaders[room] = socket.id;
                 console.log(`Leader assigned for room ${room}: ${username}`);
+                // Sync to DB
+                await Room.findOneAndUpdate({ roomId: room }, { leaderId: socket.id }, { upsert: true });
             }
 
             // Broadcast current leader
@@ -169,7 +208,7 @@ io.on("connection", (socket) => {
     });
 
     // Disconnect
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
         const user = users[socket.id];
         if (user) {
             const room = user.room;
@@ -188,6 +227,10 @@ io.on("connection", (socket) => {
                     const [newLeaderId, newLeader] = remainingUsers[0];
                     roomLeaders[room] = newLeaderId;
                     console.log(`New leader assigned for room ${room}: ${newLeader.username}`);
+
+                    // Sync to DB
+                    await Room.findOneAndUpdate({ roomId: room }, { leaderId: newLeaderId });
+
                     // Broadcast new leader to everyone
                     io.in(room).emit("leader_update", { leaderId: newLeaderId, leaderName: newLeader.username });
                 }

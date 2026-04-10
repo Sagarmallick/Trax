@@ -468,6 +468,19 @@
     <script>
         const socket = io();
 
+        socket.on("connect", () => {
+            console.log("✅ Socket connected to server. ID:", socket.id);
+        });
+
+        socket.on("mongodb_status", (data) => {
+            console.log(`🔌 MongoDB Status: ${data.status}`);
+            if (data.connected) {
+                console.log("✅ Database is ready.");
+            } else {
+                console.warn("❌ Database is NOT connected. Check MONGODB_URI.");
+            }
+        });
+
         let username = "";
         let room = "";
         let isLeader = false;
@@ -1097,6 +1110,10 @@
             }
 
             console.log("Leader update:", data);
+        });
+
+        socket.on("error_message", (msg) => {
+            alert(msg);
         });
 
         socket.on("user_left", (id) => {
